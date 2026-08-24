@@ -1,6 +1,7 @@
 import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.utils.backoff import BackoffConfig
 from app.core import settings, configure_logging, get_logger
 from app.db import Base, engine
 from app.bot import handlers
@@ -53,7 +54,15 @@ async def main():
     logger.info("scheduler_started")
 
     try:
-        await dp.start_polling(bot)
+        # min_delay=5: Telegram sends "Retry in 5 seconds" on GetUpdates flood control.
+        # Default backoff (1s) retried too early and kept extending the 429,
+        # leaving the bot unresponsive for minutes during network hiccups.
+        await dp.start_polling(
+            bot,
+            backoff_config=BackoffConfig(
+                min_delay=5.0, max_delay=60.0, factor=1.5, jitter=0.0
+            ),
+        )
     finally:
         scheduler.shutdown()
         logger.info("scheduler_shutdown")
